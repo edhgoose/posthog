@@ -1,7 +1,9 @@
 import { JSONContent } from '@tiptap/core'
+import { isEmptyObject } from 'lib/utils'
 
 import {
     breakdownFilterToQuery,
+    compareFilterToQuery,
     exlusionEntityToNode,
     funnelsFilterToQuery,
     lifecycleFilterToQuery,
@@ -19,7 +21,7 @@ import {
     isLegacyStickinessFilter,
     isLegacyTrendsFilter,
 } from '~/queries/nodes/InsightQuery/utils/legacy'
-import { InsightVizNode, NodeKind } from '~/queries/schema'
+import { InsightVizNode, NodeKind, StickinessFilterLegacy, TrendsFilterLegacy } from '~/queries/schema'
 import { FunnelExclusionLegacy, NotebookNodeType, NotebookType } from '~/types'
 
 // NOTE: Increment this number when you add a new content migration
@@ -102,6 +104,15 @@ function convertInsightQueriesToNewSchema(content: JSONContent[]): JSONContent[]
          * Insight filters
          */
         if (query.kind === NodeKind.TrendsQuery && isLegacyTrendsFilter(query.trendsFilter as any)) {
+            const compareFilter = compareFilterToQuery(query.trendsFilter as any)
+            if (!isEmptyObject(compareFilter)) {
+                query.compareFilter = compareFilter
+            }
+
+            delete (query.trendsFilter as TrendsFilterLegacy).compare
+            delete (query.trendsFilter as TrendsFilterLegacy).compare_to
+
+            // This has to come after compare, because it removes compare
             query.trendsFilter = trendsFilterToQuery(query.trendsFilter as any)
         }
 
@@ -127,6 +138,14 @@ function convertInsightQueriesToNewSchema(content: JSONContent[]): JSONContent[]
         }
 
         if (query.kind === NodeKind.StickinessQuery && isLegacyStickinessFilter(query.stickinessFilter as any)) {
+            const compareFilter = compareFilterToQuery(query.stickinessFilter as any)
+            if (!isEmptyObject(compareFilter)) {
+                query.compareFilter = compareFilter
+            }
+            delete (query.stickinessFilter as StickinessFilterLegacy).compare
+            delete (query.stickinessFilter as StickinessFilterLegacy).compare_to
+
+            // This has to come after compare, because it removes compare
             query.stickinessFilter = stickinessFilterToQuery(query.stickinessFilter as any)
         }
 

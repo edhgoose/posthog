@@ -924,8 +924,6 @@ class StickinessFilter(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    compare: Optional[bool] = None
-    compare_to: Optional[str] = None
     display: Optional[ChartDisplayType] = None
     hidden_legend_indexes: Optional[list[float]] = None
     showLegend: Optional[bool] = None

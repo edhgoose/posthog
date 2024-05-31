@@ -678,8 +678,6 @@ export type TrendsFilter = {
     showLabelsOnSeries?: TrendsFilterLegacy['show_labels_on_series']
     showPercentStackView?: TrendsFilterLegacy['show_percent_stack_view']
     hidden_legend_indexes?: TrendsFilterLegacy['hidden_legend_indexes']
-    //compare?: TrendsFilterLegacy['compare']
-    //compare_to?: TrendsFilterLegacy['compare_to']
 }
 
 export interface TrendsQueryResponse extends AnalyticsQueryResponseBase<Record<string, any>[]> {}
@@ -857,8 +855,6 @@ export type StickinessFilter = {
     showLegend?: StickinessFilterLegacy['show_legend']
     showValuesOnSeries?: StickinessFilterLegacy['show_values_on_series']
     hidden_legend_indexes?: StickinessFilterLegacy['hidden_legend_indexes']
-    compare?: TrendsFilterLegacy['compare']
-    compare_to?: TrendsFilterLegacy['compare_to']
 }
 
 export interface StickinessQueryResponse extends AnalyticsQueryResponseBase<Record<string, any>[]> {}

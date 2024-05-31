@@ -7308,12 +7308,6 @@
         "StickinessFilter": {
             "additionalProperties": false,
             "properties": {
-                "compare": {
-                    "type": "boolean"
-                },
-                "compare_to": {
-                    "type": "string"
-                },
                 "display": {
                     "$ref": "#/definitions/ChartDisplayType"
                 },
