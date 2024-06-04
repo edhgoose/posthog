@@ -805,6 +805,67 @@ describe('migrate()', () => {
                 },
             ],
         ],
+        [
+            'migrates compare from previously migrated trends query',
+            [
+                {
+                    type: 'ph-query',
+                    attrs: {
+                        query: {
+                            kind: 'InsightVizNode',
+                            source: {
+                                kind: 'TrendsQuery',
+                                series: [
+                                    {
+                                        kind: 'EventsNode',
+                                        event: '$pageview',
+                                    },
+                                ],
+                                trendsFilter: {
+                                    compare: true,
+                                    aggregationAxisFormat: 'percentage',
+                                },
+                            },
+                        },
+                        title: 'Some insight',
+                        __init: null,
+                        height: null,
+                        nodeId: '4c2a07ee-fc9f-45c5-b36c-5e14a10f8e22',
+                        children: null,
+                    },
+                },
+            ],
+            [
+                {
+                    type: 'ph-query',
+                    attrs: {
+                        query: {
+                            kind: 'InsightVizNode',
+                            source: {
+                                kind: 'TrendsQuery',
+                                series: [
+                                    {
+                                        kind: 'EventsNode',
+                                        event: '$pageview',
+                                    },
+                                ],
+                                trendsFilter: {
+                                    aggregationAxisFormat: 'percentage',
+                                },
+                                compareFilter: {
+                                    compare: true,
+                                },
+                            },
+                        },
+                        title: 'Some insight',
+                        __init: null,
+                        height: null,
+                        nodeId: '4c2a07ee-fc9f-45c5-b36c-5e14a10f8e22',
+                        children: null,
+                    },
+                },
+            ],
+        ],
     ]
 
     contentToExpected.forEach(([name, prevContent, nextContent]) => {
