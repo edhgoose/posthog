@@ -614,7 +614,6 @@ describe('filtersToQueryNode', () => {
                 insight: InsightType.STICKINESS,
                 compare: true,
                 compare_to: '-4d',
-
                 show_legend: true,
                 hidden_legend_keys: { 0: true, 10: true },
                 shown_as: ShownAsValue.STICKINESS,
