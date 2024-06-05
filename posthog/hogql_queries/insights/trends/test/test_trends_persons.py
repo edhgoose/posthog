@@ -5,6 +5,7 @@ from django.test import override_settings
 from django.utils import timezone
 from freezegun import freeze_time
 
+from posthog.api.test.test_team import create_team
 from posthog.hogql_queries.actors_query_runner import ActorsQueryRunner
 from posthog.models import Team, Cohort, GroupTypeMapping
 from posthog.models.group.util import create_group
@@ -16,7 +17,7 @@ from posthog.schema import (
     ChartDisplayType,
     Compare,
     CountPerActorMathType,
-    DateRange,
+    InsightDateRange,
     EventsNode,
     InsightActorsQuery,
     MathGroupTypeIndex,
@@ -24,6 +25,7 @@ from posthog.schema import (
     TrendsFilter,
     TrendsQuery,
     CompareFilter,
+    HogQLQueryModifiers,
 )
 from posthog.test.base import APIBaseTest, ClickhouseTestMixin, _create_event, _create_person
 
@@ -49,6 +51,7 @@ def get_actors(
         series=series,
         status=status,
         includeRecordings=includeRecordings,
+        modifiers=trends_query.modifiers,
     )
     actors_query = ActorsQuery(
         source=insight_actors_query,
@@ -60,6 +63,7 @@ def get_actors(
             *(["matched_recordings"] if includeRecordings else []),
         ],
         orderBy=["event_count DESC"],
+        modifiers=trends_query.modifiers,
     )
     response = ActorsQueryRunner(query=actors_query, team=team).calculate()
     return response.results
@@ -190,11 +194,35 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
             team=self.team,
         )
 
+        other_team = create_team(self.team.organization)
+
+        _create_person(
+            team_id=other_team.pk,
+            distinct_ids=["person4"],
+            properties={"$geoip_country_code": "US"},
+        )
+
+        for i in range(6):
+            _create_event(
+                event="$pageview",
+                distinct_id="person4",
+                timestamp=f"2023-04-{30-i} 16:00",
+                properties={"some_property": 20},
+                team=other_team,
+            )
+            _create_event(
+                event="$pageview",
+                distinct_id="person4",
+                timestamp=f"2023-05-0{i+1} 16:00",
+                properties={"some_property": 20},
+                team=other_team,
+            )
+
     def test_trends_single_series_persons(self):
         self._create_events()
         source_query = TrendsQuery(
             series=[EventsNode(event="$pageview")],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
         )
 
         result = self._get_actors(trends_query=source_query, day="2023-04-29")
@@ -208,7 +236,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
         self._create_events()
         source_query = TrendsQuery(
             series=[EventsNode(event="$pageview"), EventsNode(event="$pageleave")],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
         )
 
         result = self._get_actors(trends_query=source_query, day="2023-04-29")
@@ -229,7 +257,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
         self._create_events()
         source_query = TrendsQuery(
             series=[EventsNode(event="$pageview")],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
             breakdownFilter=BreakdownFilter(breakdown="$browser"),
         )
 
@@ -249,7 +277,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
         self._create_events()
         source_query = TrendsQuery(
             series=[EventsNode(event="$pageview")],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
             breakdownFilter=BreakdownFilter(breakdown="$geoip_country_code", breakdown_type=BreakdownType.person),
         )
 
@@ -270,7 +298,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
         self._create_events()
         source_query = TrendsQuery(
             series=[EventsNode(event="$pageview")],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
             breakdownFilter=BreakdownFilter(breakdown="$browser", breakdown_limit=1),
         )
 
@@ -292,7 +320,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
         self._create_events()
         source_query = TrendsQuery(
             series=[EventsNode(event="$pageview")],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
             breakdownFilter=BreakdownFilter(breakdown="$browser", breakdown_limit=1),
         )
 
@@ -310,7 +338,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
         self._create_events()
         source_query = TrendsQuery(
             series=[EventsNode(event="$pageview")],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
             breakdownFilter=BreakdownFilter(breakdown="properties.some_property", breakdown_type=BreakdownType.hogql),
         )
 
@@ -333,7 +361,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
         )
         source_query = TrendsQuery(
             series=[EventsNode(event="$pageview")],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
             breakdownFilter=BreakdownFilter(breakdown=[cohort.pk], breakdown_type=BreakdownType.cohort),
         )
 
@@ -345,7 +373,6 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
         self.assertEqual(get_distinct_id(result[1]), "person3")
         self.assertEqual(get_event_count(result[1]), 1)
 
-    @skip("fails, as cohort breakdown value is seemingly ignored")
     def test_trends_multi_cohort_breakdown_persons(self):
         self._create_events()
         cohort1 = _create_cohort(
@@ -360,7 +387,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
         )
         source_query = TrendsQuery(
             series=[EventsNode(event="$pageview")],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
             breakdownFilter=BreakdownFilter(breakdown=[cohort1.pk, cohort2.pk], breakdown_type=BreakdownType.cohort),
         )
 
@@ -368,7 +395,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
 
         self.assertEqual(len(result), 1)
         self.assertEqual(get_distinct_id(result[0]), "person1")
-        self.assertEqual(get_event_count(result[0]), 2)
+        self.assertEqual(get_event_count(result[0]), 3)
 
         result = self._get_actors(trends_query=source_query, day="2023-05-01", breakdown=cohort2.pk)
 
@@ -378,8 +405,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
         self.assertEqual(get_distinct_id(result[1]), "person3")
         self.assertEqual(get_event_count(result[1]), 1)
 
-    @skip("fails, as 'all' cohort can't be resolved")
-    def test_trends_all_cohort_breakdown_persons(self):
+    def trends_all_cohort_breakdown_persons(self, inCohortVia: str):
         self._create_events()
         cohort1 = _create_cohort(
             team=self.team,
@@ -388,25 +414,36 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
         )
         source_query = TrendsQuery(
             series=[EventsNode(event="$pageview")],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
             breakdownFilter=BreakdownFilter(breakdown=[cohort1.pk, "all"], breakdown_type=BreakdownType.cohort),
         )
+
+        source_query.modifiers = HogQLQueryModifiers(inCohortVia=inCohortVia)
 
         result = self._get_actors(trends_query=source_query, day="2023-05-01", breakdown=cohort1.pk)
 
         self.assertEqual(len(result), 1)
         self.assertEqual(get_distinct_id(result[0]), "person1")
-        self.assertEqual(get_event_count(result[0]), 2)
+        self.assertEqual(get_event_count(result[0]), 3)
 
         result = self._get_actors(trends_query=source_query, day="2023-05-01", breakdown="all")
 
         self.assertEqual(len(result), 3)
         self.assertEqual(get_distinct_id(result[0]), "person1")
-        self.assertEqual(get_event_count(result[0]), 2)
+        self.assertEqual(get_event_count(result[0]), 3)
         self.assertEqual(get_distinct_id(result[1]), "person2")
         self.assertEqual(get_event_count(result[1]), 2)
         self.assertEqual(get_distinct_id(result[2]), "person3")
         self.assertEqual(get_event_count(result[2]), 1)
+
+    def test_trends_all_cohort_breakdown_persons_subquery(self):
+        self.trends_all_cohort_breakdown_persons("subquery")
+
+    def test_trends_all_cohort_breakdown_persons_leftjoin(self):
+        self.trends_all_cohort_breakdown_persons("leftjoin")
+
+    def test_trends_all_cohort_breakdown_persons_leftjoin_conjoined(self):
+        self.trends_all_cohort_breakdown_persons("leftjoin_conjoined")
 
     def test_trends_math_weekly_active_persons(self):
         for i in range(17, 24):
@@ -423,7 +460,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
             )
         source_query = TrendsQuery(
             series=[EventsNode(event="$pageview", math=BaseMathType.weekly_active)],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
         )
 
         result = self._get_actors(trends_query=source_query, day="2023-04-28")
@@ -438,7 +475,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
         self._create_events()
         source_query = TrendsQuery(
             series=[EventsNode(event="$pageview", math=PropertyMathType.sum, math_property="some_property")],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
         )
 
         result = self._get_actors(trends_query=source_query, day="2023-05-01")
@@ -460,7 +497,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
                     event="$pageview", math=CountPerActorMathType.max_count_per_actor, math_property="some_property"
                 )
             ],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
         )
 
         result = self._get_actors(trends_query=source_query, day="2023-05-01")
@@ -503,7 +540,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
             series=[
                 EventsNode(event="$pageview", math="unique_group", math_group_type_index=MathGroupTypeIndex.number_0)
             ],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
         )
 
         result = self._get_actors(trends_query=source_query, day="2023-05-01")
@@ -536,7 +573,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
             series=[
                 EventsNode(event="$pageview", math="unique_group", math_group_type_index=MathGroupTypeIndex.number_0)
             ],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
         )
 
         result = self._get_actors(trends_query=source_query, day="2023-05-01")
@@ -549,7 +586,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
         self._create_events()
         source_query = TrendsQuery(
             series=[EventsNode(event="$pageview")],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
             trendsFilter=TrendsFilter(display=ChartDisplayType.BoldNumber),
         )
 
@@ -567,7 +604,7 @@ class TestTrendsPersons(ClickhouseTestMixin, APIBaseTest):
         self._create_events()
         source_query = TrendsQuery(
             series=[EventsNode(event="$pageview")],
-            dateRange=DateRange(date_from="-7d"),
+            dateRange=InsightDateRange(date_from="-7d"),
             trendsFilter=TrendsFilter(),
             compareFilter=CompareFilter(compare=True),
         )
