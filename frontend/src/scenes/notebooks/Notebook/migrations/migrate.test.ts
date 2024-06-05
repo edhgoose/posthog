@@ -866,6 +866,68 @@ describe('migrate()', () => {
                 },
             ],
         ],
+
+        [
+            'migrates compare from previously migrated stickiness query',
+            [
+                {
+                    type: 'ph-query',
+                    attrs: {
+                        query: {
+                            kind: 'InsightVizNode',
+                            source: {
+                                kind: 'StickinessQuery',
+                                series: [
+                                    {
+                                        kind: 'EventsNode',
+                                        event: '$pageview',
+                                    },
+                                ],
+                                stickinessFilter: {
+                                    compare: true,
+                                    showValuesOnSeries: true,
+                                },
+                            },
+                        },
+                        title: 'Some insight',
+                        __init: null,
+                        height: null,
+                        nodeId: '4c2a07ee-fc9f-45c5-b36c-5e14a10f8e22',
+                        children: null,
+                    },
+                },
+            ],
+            [
+                {
+                    type: 'ph-query',
+                    attrs: {
+                        query: {
+                            kind: 'InsightVizNode',
+                            source: {
+                                kind: 'StickinessQuery',
+                                series: [
+                                    {
+                                        kind: 'EventsNode',
+                                        event: '$pageview',
+                                    },
+                                ],
+                                stickinessFilter: {
+                                    showValuesOnSeries: true,
+                                },
+                                compareFilter: {
+                                    compare: true,
+                                },
+                            },
+                        },
+                        title: 'Some insight',
+                        __init: null,
+                        height: null,
+                        nodeId: '4c2a07ee-fc9f-45c5-b36c-5e14a10f8e22',
+                        children: null,
+                    },
+                },
+            ],
+        ],
     ]
 
     contentToExpected.forEach(([name, prevContent, nextContent]) => {

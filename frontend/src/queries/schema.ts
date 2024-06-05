@@ -695,6 +695,22 @@ export type TrendsFilter = {
     hidden_legend_indexes?: TrendsFilterLegacy['hidden_legend_indexes']
 }
 
+export const TRENDS_FILTER_PROPERTIES = new Set([
+    'smoothingIntervals',
+    'formula',
+    'display',
+    'showLegend',
+    'breakdown_histogram_bin_count',
+    'aggregationAxisFormat',
+    'aggregationAxisPrefix',
+    'aggregationAxisPostfix',
+    'decimalPlaces',
+    'showValuesOnSeries',
+    'showLabelsOnSeries',
+    'showPercentStackView',
+    'hidden_legend_indexes',
+])
+
 export interface TrendsQueryResponse extends AnalyticsQueryResponseBase<Record<string, any>[]> {}
 export type CachedTrendsQueryResponse = TrendsQueryResponse & CachedQueryResponseMixin
 
@@ -889,6 +905,14 @@ export type StickinessFilter = {
     showValuesOnSeries?: StickinessFilterLegacy['show_values_on_series']
     hidden_legend_indexes?: StickinessFilterLegacy['hidden_legend_indexes']
 }
+
+export const STICKINESS_FILTER_PROPERTIES = new Set([
+    'compare',
+    'display',
+    'showLegend',
+    'showValuesOnSeries',
+    'hidden_legend_indexes',
+])
 
 export interface StickinessQueryResponse extends AnalyticsQueryResponseBase<Record<string, any>[]> {}
 export type CachedStickinessQueryResponse = StickinessQueryResponse & CachedQueryResponseMixin

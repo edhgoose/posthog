@@ -21,7 +21,16 @@ import {
     isLegacyStickinessFilter,
     isLegacyTrendsFilter,
 } from '~/queries/nodes/InsightQuery/utils/legacy'
-import { InsightVizNode, NodeKind, StickinessFilterLegacy, TrendsFilterLegacy } from '~/queries/schema'
+import {
+    InsightVizNode,
+    NodeKind,
+    STICKINESS_FILTER_PROPERTIES,
+    StickinessFilter,
+    StickinessFilterLegacy,
+    TRENDS_FILTER_PROPERTIES,
+    TrendsFilter,
+    TrendsFilterLegacy,
+} from '~/queries/schema'
 import { FunnelExclusionLegacy, NotebookNodeType, NotebookType } from '~/types'
 
 // NOTE: Increment this number when you add a new content migration
@@ -112,8 +121,11 @@ function convertInsightQueriesToNewSchema(content: JSONContent[]): JSONContent[]
             delete (query.trendsFilter as TrendsFilterLegacy).compare
             delete (query.trendsFilter as TrendsFilterLegacy).compare_to
 
-            // This has to come after compare, because it removes compare
-            query.trendsFilter = trendsFilterToQuery(query.trendsFilter as any)
+            query.trendsFilter = Object.fromEntries(
+                Object.entries(query.trendsFilter as TrendsFilter)
+                    .filter(([k, _]) => TRENDS_FILTER_PROPERTIES.has(k))
+                    .concat(Object.entries(trendsFilterToQuery(query.trendsFilter as any)))
+            )
         }
 
         if (query.kind === NodeKind.FunnelsQuery) {
@@ -146,7 +158,11 @@ function convertInsightQueriesToNewSchema(content: JSONContent[]): JSONContent[]
             delete (query.stickinessFilter as StickinessFilterLegacy).compare_to
 
             // This has to come after compare, because it removes compare
-            query.stickinessFilter = stickinessFilterToQuery(query.stickinessFilter as any)
+            query.stickinessFilter = Object.fromEntries(
+                Object.entries(query.stickinessFilter as StickinessFilter)
+                    .filter(([k, _]) => STICKINESS_FILTER_PROPERTIES.has(k))
+                    .concat(Object.entries(stickinessFilterToQuery(query.stickinessFilter as any)))
+            )
         }
 
         if (query.kind === NodeKind.LifecycleQuery && isLegacyLifecycleFilter(query.lifecycleFilter as any)) {
