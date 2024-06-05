@@ -7756,7 +7756,6 @@
                     "default": "ActionsLineGraph"
                 },
                 "formula": {
-                    "default": false,
                     "type": "string"
                 },
                 "hidden_legend_indexes": {

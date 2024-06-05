@@ -1065,7 +1065,7 @@ class TrendsFilter(BaseModel):
     breakdown_histogram_bin_count: Optional[float] = None
     decimalPlaces: Optional[float] = None
     display: Optional[ChartDisplayType] = ChartDisplayType.ActionsLineGraph
-    formula: Optional[str] = False
+    formula: Optional[str] = None
     hidden_legend_indexes: Optional[list[float]] = None
     showLabelsOnSeries: Optional[bool] = None
     showLegend: Optional[bool] = False
