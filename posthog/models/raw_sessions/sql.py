@@ -27,10 +27,11 @@ DROP_RAW_SESSION_VIEW_SQL = lambda: f"DROP VIEW IF EXISTS {TABLE_BASE_NAME}_v ON
 RAW_SESSIONS_TABLE_BASE_SQL = """
 CREATE TABLE IF NOT EXISTS {table_name} ON CLUSTER '{cluster}'
 (
-    -- part of order by so will aggregate correctly
-    session_id_v7 UInt128, -- integer representation of a uuidv7
-    -- part of order by so will aggregate correctly
+    -- order components:
     team_id Int64,
+    session_id_date_part UInt64, -- time component of the id, also used in the sample key
+    session_id_v7 UInt128, -- integer representation of a uuidv7
+ 
     -- ClickHouse will pick the latest value of distinct_id for the session
     -- this is fine since even if the distinct_id changes during a session
     distinct_id AggregateFunction(argMax, String, DateTime64(6, 'UTC')),
@@ -62,12 +63,17 @@ CREATE TABLE IF NOT EXISTS {table_name} ON CLUSTER '{cluster}'
     initial_igshid AggregateFunction(argMin, String, DateTime64(6, 'UTC')),
     initial_ttclid AggregateFunction(argMin, String, DateTime64(6, 'UTC')),
 
-    -- create a map of how many times we saw each event
-    event_count_map SimpleAggregateFunction(sumMap, Map(String, Int64)),
-    -- duplicate the event count as a specific column for pageviews and autocaptures,
-    -- as these are used in some key queries and need to be fast
-    pageview_count SimpleAggregateFunction(sum, Int64),
-    autocapture_count SimpleAggregateFunction(sum, Int64),
+    -- count pageview, screen or autocapture events, up to a maximum of 2, for bounce rate calculation
+    -- use uniqUpTo as it will not double-count if an event is sent twice, which is something we have seen in production,
+    -- whilst being quick to query and not taking up too much space
+    pageview_and_screen_count_up_to_2 AggregateFunction(uniqUpTo(2), UUID, Int64),
+    autocapture_count_up_to_2 AggregateFunction(uniqUpTo(2), UUID, Int64),
+
+    -- count pageview and screen events for providing totals. Unclear if we can use this as it is not idempotent
+    pageview_and_screen_count SimpleAggregateFunction(sum, Int64),
+    -- do a clickhouse uniq as an alternative for providing totals, this is slower than sum but is idempotent
+    pageview_and_screen_uniq AggregateFunction(uniq, UUID, Int64),
+
 ) ENGINE = {engine}
 """
 
@@ -76,19 +82,9 @@ RAW_SESSIONS_DATA_TABLE_ENGINE = lambda: AggregatingMergeTree(TABLE_BASE_NAME, r
 RAW_SESSIONS_TABLE_SQL = lambda: (
         RAW_SESSIONS_TABLE_BASE_SQL
         + """
-    PARTITION BY toYYYYMM(fromUnixTimestamp(intDiv(toUInt64(bitShiftRight(session_id_v7, 80)), 1000)))
-    -- order by is used by the aggregating merge tree engine to
-    -- identify candidates to merge, e.g. toDate(min_timestamp)
-    -- would mean we would have one row per day per session_id
-    -- if CH could completely merge to match the order by
-    -- it is also used to organise data to make queries faster
-    -- we want the fewest rows possible but also the fastest queries
-    -- since we query by date and not by time
-    -- and order by must be in order of increasing cardinality
-    -- so we order by date first, then team_id, then session_id
-    -- hopefully, this is a good balance between the two
-    ORDER BY (team_id, session_id_v7)
-    SAMPLE BY session_id
+    PARTITION BY toYYYYMM(fromUnixTimestamp(intDiv(toUInt64(bitShiftRight(session_id_v7, 80)), 1000))) -- convert uuidv7 into date
+    ORDER BY (team_id, session_id_v7, sipHash64(session_id_v7)) -- the hash is only present to make sampling work
+    SAMPLE BY sipHash64(session_id_v7)
     SETTINGS index_granularity=512
 """
 ).format(
@@ -106,11 +102,11 @@ RAW_SESSION_TABLE_MV_SELECT_SQL = (
     lambda: """
 SELECT
 
-`$session_id` as session_id,
+accurateCastOrNull(events.`$session_id`, 'UUID') as session_id_v7,
 team_id,
 
--- it doesn't matter which distinct_id gets picked (it'll be somewhat random) as they can all join to the right person
-any(distinct_id) as distinct_id,
+-- always use the most recent distinct_id, this can be used to approximate the number of users
+argMaxState(distinct_id, timestamp) as distinct_id,
 
 min(timestamp) AS min_timestamp,
 max(timestamp) AS max_timestamp,
@@ -139,12 +135,15 @@ argMinState({mc_cid_property}, timestamp) as initial_mc_cid,
 argMinState({igshid_property}, timestamp) as initial_igshid,
 argMinState({ttclid_property}, timestamp) as initial_ttclid,
 
-sumMap(CAST(([event], [1]), 'Map(String, UInt64)')) as event_count_map,
-sumIf(1, event='$pageview') as pageview_count,
-sumIf(1, event='$autocapture') as autocapture_count
+
+uniqUpTo(2)(if(event='$pageview' OR event='$screen', uuid, NULL)) as pageview_and_screen_count_up_to_2,
+uniqUpTo(2)(if(event='$autocapture', uuid, NULL)) as autocapture_count_up_to_2,
+
+sumIf(1, event='$pageview' OR event='$screen') as pageview_and_screen_count,
+uniq(if(event='$pageview' OR event='$screen', uuid, NULL)) as pageview_and_screen_uniq,
 
 FROM {database}.sharded_events
-WHERE `$session_id` IS NOT NULL AND `$session_id` != ''
+WHERE bitAnd(bitShiftRight(accurateCastOrNull(events.`$session_id`, 'UUID'), 76), 0xF) == 7 -- has a session id and is valid uuidv7
 GROUP BY `$session_id`, team_id
 """.format(
         database=settings.CLICKHOUSE_DATABASE,
@@ -205,7 +204,7 @@ WRITABLE_RAW_SESSIONS_TABLE_SQL = lambda: RAW_SESSIONS_TABLE_BASE_SQL.format(
     engine=Distributed(
         data_table=RAW_SESSIONS_DATA_TABLE(),
         # shard via session_id so that all events for a session are on the same shard
-        sharding_key="sipHash64(session_id)",
+        sharding_key="sipHash64(session_id_v7)",
     ),
 )
 
@@ -215,7 +214,7 @@ DISTRIBUTED_RAW_SESSIONS_TABLE_SQL = lambda: RAW_SESSIONS_TABLE_BASE_SQL.format(
     cluster=settings.CLICKHOUSE_CLUSTER,
     engine=Distributed(
         data_table=RAW_SESSIONS_DATA_TABLE(),
-        sharding_key="sipHash64(session_id)",
+        sharding_key="sipHash64(session_id_v7)",
     ),
 )
 
@@ -226,7 +225,7 @@ RAW_SESSIONS_VIEW_SQL = (
     lambda: f"""
 CREATE OR REPLACE VIEW {TABLE_BASE_NAME}_v ON CLUSTER '{settings.CLICKHOUSE_CLUSTER}' AS
 SELECT
-    session_id,
+    session_id_v7,
     team_id,
     any(distinct_id) as distinct_id,
     min(min_timestamp) as min_timestamp,
@@ -253,11 +252,12 @@ SELECT
     argMinMerge(initial_mc_cid) as initial_mc_cid,
     argMinMerge(initial_igshid) as initial_igshid,
     argMinMerge(initial_ttclid) as initial_ttclid,
-    sumMap(event_count_map) as event_count_map,
-    sum(pageview_count) as pageview_count,
-    sum(autocapture_count) as autocapture_count
+    uniqUpToMerge(2)(pageview_and_screen_count_up_to_2) as pageview_and_screen_count_up_to_2,
+    uniqUpToMerge(2)(autocapture_count_up_to_2) as autocapture_count_up_to_2,
+    sum(pageview_and_screen_count) as pageview_and_screen_count,
+    uniqMerge(pageview_and_screen_uniq) as pageview_and_screen_uniq
 FROM sessions
-GROUP BY session_id, team_id
+GROUP BY session_id_v7, team_id
 """
 )
 
