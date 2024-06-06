@@ -675,7 +675,6 @@ export type TrendsFilterLegacy = Omit<
 export type TrendsFilter = {
     /** @default 1 */
     smoothingIntervals?: integer
-    /** @default false */
     formula?: TrendsFilterLegacy['formula']
     /** @default ActionsLineGraph */
     display?: TrendsFilterLegacy['display']
