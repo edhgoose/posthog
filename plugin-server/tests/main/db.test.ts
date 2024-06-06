@@ -444,18 +444,18 @@ describe('DB', () => {
                             id: uuid,
                             properties: JSON.stringify({}),
                             is_deleted: 0,
-                            version: 0,
+                            version: 1,
                         }),
                         expect.objectContaining({
                             id: uuid,
                             properties: JSON.stringify({ foo: 'bar' }),
                             is_deleted: 0,
-                            version: 1,
+                            version: 2,
                         }),
                         expect.objectContaining({
                             id: uuid,
                             is_deleted: 1,
-                            version: 101,
+                            version: 102,
                         }),
                     ])
                 )
@@ -466,7 +466,7 @@ describe('DB', () => {
                         expect.objectContaining({
                             id: uuid,
                             is_deleted: 1,
-                            version: 101,
+                            version: 102,
                         }),
                     ])
                 )
@@ -499,7 +499,7 @@ describe('DB', () => {
                     properties: { foo: 'bar' },
                     is_identified: true,
                     created_at: TIMESTAMP,
-                    version: 0,
+                    version: 1,
                 })
             )
         })

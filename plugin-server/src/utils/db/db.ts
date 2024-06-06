@@ -641,11 +641,11 @@ export class DB {
         isUserId: number | null,
         isIdentified: boolean,
         uuid: string,
-        distinctIds?: string[],
-        version = 0
+        distinctIds?: string[]
     ): Promise<InternalPerson> {
         distinctIds ||= []
 
+        const version = 1
         const { rows } = await this.postgres.query<RawPerson>(
             PostgresUse.COMMON_WRITE,
             `WITH inserted_person AS (
@@ -826,8 +826,8 @@ export class DB {
         return personDistinctIds.map((pdi) => pdi.distinct_id)
     }
 
-    public async addDistinctId(person: InternalPerson, distinctId: string, version: number): Promise<void> {
-        const kafkaMessages = await this.addDistinctIdPooled(person, distinctId, version)
+    public async addDistinctId(person: InternalPerson, distinctId: string): Promise<void> {
+        const kafkaMessages = await this.addDistinctIdPooled(person, distinctId)
         if (kafkaMessages.length) {
             await this.kafkaProducer.queueMessages({ kafkaMessages, waitForAck: true })
         }
@@ -836,9 +836,9 @@ export class DB {
     public async addDistinctIdPooled(
         person: InternalPerson,
         distinctId: string,
-        version: number,
         tx?: TransactionClient
     ): Promise<ProducerRecord[]> {
+        const version = 1
         const insertResult = await this.postgres.query(
             tx ?? PostgresUse.COMMON_WRITE,
             // NOTE: Keep this in sync with the posthog_persondistinctid INSERT in `createPerson`

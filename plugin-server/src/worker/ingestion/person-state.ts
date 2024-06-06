@@ -92,7 +92,6 @@ export class PersonState {
         private timestamp: DateTime,
         private processPerson: boolean, // $process_person_profile flag from the event
         private db: DB,
-        private lazyPersonCreation: boolean,
         private personOverrideWriter?: DeferredPersonOverrideWriter
     ) {
         this.eventProperties = event.properties!
@@ -104,50 +103,39 @@ export class PersonState {
 
     async update(): Promise<[Person, Promise<void>]> {
         if (!this.processPerson) {
-            if (this.lazyPersonCreation) {
-                const existingPerson = await this.db.fetchPerson(this.teamId, this.distinctId, { useReadReplica: true })
-                if (existingPerson) {
-                    const person = existingPerson as Person
-
-                    // Ensure person properties don't propagate elsewhere, such as onto the event itself.
-                    person.properties = {}
-
-                    if (this.timestamp > person.created_at.plus({ minutes: 1 })) {
-                        // See documentation on the field.
-                        //
-                        // Note that we account for timestamp vs person creation time (with a little
-                        // padding for good measure) to account for ingestion lag. It's possible for
-                        // events to be processed after person creation even if they were sent prior
-                        // to person creation, and the user did nothing wrong in that case.
-                        person.force_upgrade = true
-                    }
-
-                    return [person, Promise.resolve()]
-                }
-
-                // We need a value from the `person_created_column` in ClickHouse. This should be
-                // hidden from users for events without a real person, anyway. It's slightly offset
-                // from the 0 date (by 5 seconds) in order to assist in debugging by being
-                // harmlessly distinct from Unix UTC "0".
-                const createdAt = DateTime.utc(1970, 1, 1, 0, 0, 5)
-
-                const fakePerson: Person = {
-                    team_id: this.teamId,
-                    properties: {},
-                    uuid: uuidFromDistinctId(this.teamId, this.distinctId),
-                    created_at: createdAt,
-                }
-                return [fakePerson, Promise.resolve()]
-            } else {
-                // We don't need to handle any properties for `processPerson=false` events, so we can
-                // short circuit by just finding or creating a person and returning early.
-                const [person, _] = await promiseRetry(() => this.createOrGetPerson(), 'get_person_personless')
+            const existingPerson = await this.db.fetchPerson(this.teamId, this.distinctId, { useReadReplica: true })
+            if (existingPerson) {
+                const person = existingPerson as Person
 
                 // Ensure person properties don't propagate elsewhere, such as onto the event itself.
                 person.properties = {}
 
+                if (this.timestamp > person.created_at.plus({ minutes: 1 })) {
+                    // See documentation on the field.
+                    //
+                    // Note that we account for timestamp vs person creation time (with a little
+                    // padding for good measure) to account for ingestion lag. It's possible for
+                    // events to be processed after person creation even if they were sent prior
+                    // to person creation, and the user did nothing wrong in that case.
+                    person.force_upgrade = true
+                }
+
                 return [person, Promise.resolve()]
             }
+
+            // We need a value from the `person_created_column` in ClickHouse. This should be
+            // hidden from users for events without a real person, anyway. It's slightly offset
+            // from the 0 date (by 5 seconds) in order to assist in debugging by being
+            // harmlessly distinct from Unix UTC "0".
+            const createdAt = DateTime.utc(1970, 1, 1, 0, 0, 5)
+
+            const fakePerson: Person = {
+                team_id: this.teamId,
+                properties: {},
+                uuid: uuidFromDistinctId(this.teamId, this.distinctId),
+                created_at: createdAt,
+            }
+            return [fakePerson, Promise.resolve()]
         }
 
         const [person, identifyOrAliasKafkaAck]: [InternalPerson | undefined, Promise<void>] =
@@ -222,8 +210,7 @@ export class PersonState {
         isUserId: number | null,
         isIdentified: boolean,
         creatorEventUuid: string,
-        distinctIds: string[],
-        version = 0
+        distinctIds: string[]
     ): Promise<InternalPerson> {
         if (distinctIds.length < 1) {
             throw new Error('at least 1 distinctId is required in `createPerson`')
@@ -251,8 +238,7 @@ export class PersonState {
             isUserId,
             isIdentified,
             uuid,
-            distinctIds,
-            version
+            distinctIds
         )
     }
 
@@ -415,30 +401,11 @@ export class PersonState {
         const otherPerson = await this.db.fetchPerson(teamId, otherPersonDistinctId)
         const mergeIntoPerson = await this.db.fetchPerson(teamId, mergeIntoDistinctId)
 
-        // Historically, we always INSERT-ed new `posthog_persondistinctid` rows with `version=0`.
-        // Overrides are only created when the version is > 0, see:
-        //   https://github.com/PostHog/posthog/blob/92e17ce307a577c4233d4ab252eebc6c2207a5ee/posthog/models/person/sql.py#L269-L287
-        //
-        // With the addition of optional person processing, we are now rolling out a change to
-        // lazily create `posthog_persondistinctid` and `posthog_person` rows. This means that:
-        // 1. At merge time, it's possible this `distinct_id` and its deterministically generated
-        //    `person.uuid` has already been used for events in ClickHouse, but they have no
-        //    corresponding rows in the `posthog_persondistinctid` or `posthog_person` tables
-        // 2. We need to assume the `distinct_id`/`person.uuid` have been used before (by
-        //    `$process_person_profile=false` events) and create an override row for this
-        //    `distinct_id` even though we're just now INSERT-ing it into Postgres/ClickHouse. We do
-        //    this by starting with `version=1`, as if we had just deleted the old user and were
-        //    updating the `distinct_id` row as part of the merge
-        let addDistinctIdVersion = 0
-        if (this.lazyPersonCreation) {
-            addDistinctIdVersion = 1
-        }
-
         if (otherPerson && !mergeIntoPerson) {
-            await this.db.addDistinctId(otherPerson, mergeIntoDistinctId, addDistinctIdVersion)
+            await this.db.addDistinctId(otherPerson, mergeIntoDistinctId)
             return [otherPerson, Promise.resolve()]
         } else if (!otherPerson && mergeIntoPerson) {
-            await this.db.addDistinctId(mergeIntoPerson, otherPersonDistinctId, addDistinctIdVersion)
+            await this.db.addDistinctId(mergeIntoPerson, otherPersonDistinctId)
             return [mergeIntoPerson, Promise.resolve()]
         } else if (otherPerson && mergeIntoPerson) {
             if (otherPerson.id == mergeIntoPerson.id) {
@@ -463,8 +430,7 @@ export class PersonState {
                 null,
                 true,
                 this.event.uuid,
-                [mergeIntoDistinctId, otherPersonDistinctId],
-                addDistinctIdVersion
+                [mergeIntoDistinctId, otherPersonDistinctId]
             ),
             Promise.resolve(),
         ]

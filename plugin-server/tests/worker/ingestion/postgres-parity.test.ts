@@ -118,7 +118,7 @@ describe('postgres parity', () => {
                 is_user_id: null,
                 is_identified: true,
                 uuid: uuid,
-                version: 0,
+                version: 1,
             },
         ])
         const postgresDistinctIds = await hub.db.fetchDistinctIdValues(person, Database.Postgres)
@@ -131,7 +131,7 @@ describe('postgres parity', () => {
                     distinct_id: 'distinct1',
                     person_id: person.uuid,
                     team_id: teamId,
-                    version: 0,
+                    version: 1,
                     is_deleted: 0,
                     _timestamp: expect.any(String),
                     _offset: expect.any(Number),
@@ -141,7 +141,7 @@ describe('postgres parity', () => {
                     distinct_id: 'distinct2',
                     person_id: person.uuid,
                     team_id: teamId,
-                    version: 0,
+                    version: 1,
                     is_deleted: 0,
                     _timestamp: expect.any(String),
                     _offset: expect.any(Number),
@@ -191,7 +191,7 @@ describe('postgres parity', () => {
         expect(postgresPersons.length).toEqual(1)
 
         expect(postgresPersons[0].is_identified).toEqual(true)
-        expect(postgresPersons[0].version).toEqual(1)
+        expect(postgresPersons[0].version).toEqual(2)
         expect(postgresPersons[0].properties).toEqual({ replacedUserProp: 'propValue' })
 
         expect(clickHousePersons[0].is_identified).toEqual(1)
@@ -211,7 +211,7 @@ describe('postgres parity', () => {
             waitForAck: true,
         })
 
-        expect(updatedPerson.version).toEqual(2)
+        expect(updatedPerson.version).toEqual(3)
 
         await delayUntilEventIngested(async () =>
             (await hub.db.fetchPersons(Database.ClickHouse)).filter((p) => !p.is_identified)
@@ -279,7 +279,7 @@ describe('postgres parity', () => {
                 distinct_id: 'distinct1',
                 person_id: person.id,
                 team_id: teamId,
-                version: '0',
+                version: '1',
             }),
         ])
         expect(newClickHouseDistinctIdValues).toEqual([
@@ -287,7 +287,7 @@ describe('postgres parity', () => {
                 distinct_id: 'distinct1',
                 person_id: person.uuid,
                 team_id: teamId,
-                version: 0,
+                version: 1,
                 is_deleted: 0,
                 _timestamp: expect.any(String),
                 _offset: expect.any(Number),
@@ -297,7 +297,7 @@ describe('postgres parity', () => {
 
         // add 'anotherOne' to person
 
-        await hub.db.addDistinctId(postgresPerson, 'anotherOne', 0)
+        await hub.db.addDistinctId(postgresPerson, 'anotherOne')
 
         await delayUntilEventIngested(() => hub.db.fetchDistinctIdValues(postgresPerson, Database.ClickHouse), 2)
 
@@ -370,7 +370,7 @@ describe('postgres parity', () => {
                     distinct_id: 'another_distinct_id',
                     person_id: anotherPerson.uuid,
                     team_id: teamId,
-                    version: 0,
+                    version: 1,
                     is_deleted: 0,
                     _timestamp: expect.any(String),
                     _offset: expect.any(Number),
@@ -380,7 +380,7 @@ describe('postgres parity', () => {
                     distinct_id: 'distinct1',
                     person_id: anotherPerson.uuid,
                     team_id: teamId,
-                    version: 1,
+                    version: 2,
                     is_deleted: 0,
                     _timestamp: expect.any(String),
                     _offset: expect.any(Number),

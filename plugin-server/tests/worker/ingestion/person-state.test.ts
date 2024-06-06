@@ -111,7 +111,6 @@ describe('PersonState.update()', () => {
         event: Partial<PluginEvent>,
         customHub?: Hub,
         processPerson = true,
-        lazyPersonCreation = false,
         timestampParam = timestamp
     ) {
         const fullEvent = {
@@ -127,7 +126,6 @@ describe('PersonState.update()', () => {
             timestampParam,
             processPerson,
             customHub ? customHub.db : hub.db,
-            lazyPersonCreation,
             overridesMode?.getWriter(customHub ?? hub)
         )
     }
@@ -192,7 +190,6 @@ describe('PersonState.update()', () => {
 
             const hubParam = undefined
             const processPerson = false
-            const lazyPersonCreation = true
             const [fakePerson, kafkaAcks] = await personState(
                 {
                     event: '$pageview',
@@ -201,8 +198,7 @@ describe('PersonState.update()', () => {
                     properties: { $set: { should_be_dropped: 100 } },
                 },
                 hubParam,
-                processPerson,
-                lazyPersonCreation
+                processPerson
             ).update()
             await hub.db.kafkaProducer.flush()
             await kafkaAcks
@@ -231,7 +227,6 @@ describe('PersonState.update()', () => {
 
             const hubParam = undefined
             let processPerson = true
-            const lazyPersonCreation = true
             const [_person, kafkaAcks] = await personState(
                 {
                     event: '$identify',
@@ -241,8 +236,7 @@ describe('PersonState.update()', () => {
                     },
                 },
                 hubParam,
-                processPerson,
-                lazyPersonCreation
+                processPerson
             ).update()
             await hub.db.kafkaProducer.flush()
             await kafkaAcks
@@ -276,7 +270,6 @@ describe('PersonState.update()', () => {
                 },
                 hubParam,
                 processPerson,
-                lazyPersonCreation,
                 timestampParam
             ).update()
             await hub.db.kafkaProducer.flush()
@@ -311,7 +304,7 @@ describe('PersonState.update()', () => {
                     uuid: newUserUuid,
                     properties: { $creator_event_uuid: event_uuid, null_byte: '\uFFFD' },
                     created_at: timestamp,
-                    version: 0,
+                    version: 1,
                     is_identified: false,
                 })
             )
@@ -353,7 +346,7 @@ describe('PersonState.update()', () => {
                     uuid: newUserUuid,
                     properties: {},
                     created_at: timestamp,
-                    version: 0,
+                    version: 1,
                     is_identified: false,
                 })
             )
@@ -390,7 +383,7 @@ describe('PersonState.update()', () => {
                     uuid: newUserUuid,
                     properties: { $creator_event_uuid: originalEventUuid, c: 420 },
                     created_at: timestamp,
-                    version: 0,
+                    version: 1,
                     is_identified: false,
                 })
             )
@@ -449,7 +442,7 @@ describe('PersonState.update()', () => {
                     uuid: newUserUuid,
                     properties: {},
                     created_at: timestamp,
-                    version: 0,
+                    version: 1,
                     is_identified: false,
                 })
             )
@@ -524,7 +517,7 @@ describe('PersonState.update()', () => {
                     uuid: newUserUuid,
                     properties: { a: 1, b: 3, c: 4 },
                     created_at: timestamp,
-                    version: 0,
+                    version: 1,
                     is_identified: false,
                 })
             )
@@ -657,7 +650,7 @@ describe('PersonState.update()', () => {
                     uuid: newUserUuid,
                     properties: { b: 3, c: 4 },
                     created_at: timestamp,
-                    version: 0,
+                    version: 1,
                     is_identified: false,
                 })
             )
@@ -713,7 +706,7 @@ describe('PersonState.update()', () => {
             // Pass in a person, but another thread merges it - we shouldn't error in this case, but instead if we couldn't update we should retry?
             const mergeDeletedPerson: InternalPerson = {
                 created_at: timestamp,
-                version: 0,
+                version: 1,
                 id: 0,
                 team_id: teamId,
                 properties: { a: 5, b: 7 },
@@ -802,7 +795,7 @@ describe('PersonState.update()', () => {
                         uuid: newUserUuid,
                         properties: { foo: 'bar' },
                         created_at: timestamp,
-                        version: 0,
+                        version: 1,
                         is_identified: true,
                     })
                 )
@@ -842,7 +835,7 @@ describe('PersonState.update()', () => {
                         uuid: newUserUuid,
                         properties: {},
                         created_at: timestamp,
-                        version: 0,
+                        version: 1,
                         is_identified: false,
                     })
                 )
@@ -875,7 +868,7 @@ describe('PersonState.update()', () => {
                         uuid: newUserUuid,
                         properties: {},
                         created_at: timestamp,
-                        version: 0,
+                        version: 1,
                         is_identified: false,
                     })
                 )
@@ -912,7 +905,7 @@ describe('PersonState.update()', () => {
                         uuid: oldUserUuid,
                         properties: {},
                         created_at: timestamp,
-                        version: 0,
+                        version: 1,
                         is_identified: false,
                     })
                 )
@@ -1075,7 +1068,7 @@ describe('PersonState.update()', () => {
                         uuid: newUserUuid,
                         properties: {},
                         created_at: timestamp2,
-                        version: 0,
+                        version: 1,
                         is_identified: false,
                     })
                 )
@@ -1089,7 +1082,7 @@ describe('PersonState.update()', () => {
                         uuid: oldUserUuid,
                         properties: {},
                         created_at: timestamp,
-                        version: 0,
+                        version: 1,
                         is_identified: true,
                     })
                 )
@@ -1122,7 +1115,7 @@ describe('PersonState.update()', () => {
                         uuid: newUserUuid,
                         properties: {},
                         created_at: timestamp2,
-                        version: 0,
+                        version: 1,
                         is_identified: true,
                     })
                 )
@@ -1136,7 +1129,7 @@ describe('PersonState.update()', () => {
                         uuid: oldUserUuid,
                         properties: {},
                         created_at: timestamp,
-                        version: 0,
+                        version: 1,
                         is_identified: true,
                     })
                 )
@@ -1234,7 +1227,7 @@ describe('PersonState.update()', () => {
                         uuidFromDistinctId(teamId, distinctId),
                         [distinctId]
                     )
-                    await hub.db.addDistinctId(person, distinctId, 0) // this throws
+                    await hub.db.addDistinctId(person, distinctId) // this throws
                 })
 
                 const [person, kafkaAcks] = await personState({
@@ -1735,7 +1728,7 @@ describe('PersonState.update()', () => {
                         uuid: firstUserUuid,
                         properties: {},
                         created_at: timestamp,
-                        version: 0,
+                        version: 1,
                         is_identified: true,
                     })
                 )
@@ -1889,7 +1882,7 @@ describe('PersonState.update()', () => {
                             uuid: firstUserUuid,
                             properties: {},
                             created_at: timestamp,
-                            version: 0,
+                            version: 1,
                             is_identified: false,
                         }),
                         expect.objectContaining({
@@ -1897,7 +1890,7 @@ describe('PersonState.update()', () => {
                             uuid: secondUserUuid,
                             properties: {},
                             created_at: timestamp,
-                            version: 0,
+                            version: 1,
                             is_identified: false,
                         }),
                     ])
@@ -1937,7 +1930,7 @@ describe('PersonState.update()', () => {
                             uuid: firstUserUuid,
                             properties: {},
                             created_at: timestamp,
-                            version: 0,
+                            version: 1,
                             is_identified: false,
                         }),
                         expect.objectContaining({
@@ -1945,7 +1938,7 @@ describe('PersonState.update()', () => {
                             uuid: secondUserUuid,
                             properties: {},
                             created_at: timestamp,
-                            version: 0,
+                            version: 1,
                             is_identified: false,
                         }),
                     ])
@@ -1990,7 +1983,7 @@ describe('PersonState.update()', () => {
                             uuid: firstUserUuid,
                             properties: {},
                             created_at: timestamp,
-                            version: 0,
+                            version: 1,
                             is_identified: false,
                         }),
                         expect.objectContaining({
@@ -1998,7 +1991,7 @@ describe('PersonState.update()', () => {
                             uuid: secondUserUuid,
                             properties: {},
                             created_at: timestamp,
-                            version: 0,
+                            version: 1,
                             is_identified: false,
                         }),
                     ])
@@ -2072,7 +2065,7 @@ describe('PersonState.update()', () => {
                             uuid: firstUserUuid,
                             properties: {},
                             created_at: timestamp,
-                            version: 0,
+                            version: 1,
                             is_identified: false,
                         }),
                         expect.objectContaining({
@@ -2080,7 +2073,7 @@ describe('PersonState.update()', () => {
                             uuid: secondUserUuid,
                             properties: {},
                             created_at: timestamp,
-                            version: 0,
+                            version: 1,
                             is_identified: false,
                         }),
                     ])

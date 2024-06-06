@@ -61,7 +61,7 @@ describe.each([[true], [false]])('processPersonsStep()', (poEEmbraceJoin) => {
                 id: expect.any(Number),
                 uuid: expect.any(String),
                 properties: { a: 5, $creator_event_uuid: expect.any(String) },
-                version: 0,
+                version: 1,
                 is_identified: false,
                 team_id: teamId,
             })
@@ -110,7 +110,7 @@ describe.each([[true], [false]])('processPersonsStep()', (poEEmbraceJoin) => {
                     $creator_event_uuid: expect.any(String),
                     $browser: 'Chrome',
                 },
-                version: 0,
+                version: 1,
                 is_identified: false,
             })
         )
